@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Calidad Sede Villa – Smart OCR v3</title>
+<title>Smart OCR v4.1 – Calidad Sede Villa</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png" type="image/png"/>
 <meta name="theme-color" content="#0e141b"/>
@@ -21,7 +21,6 @@
   .ok{background:var(--ok);color:#06140a}
   .danger{background:var(--err);color:white}
   input[type=file]{display:none}
-  canvas{max-width:100%;border:1px solid var(--line);border-radius:12px}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .cols{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px}
   .chip{font-size:12px;color:var(--muted);background:#0b1118;border:1px solid var(--line);padding:6px 8px;border-radius:999px;display:inline-block}
@@ -29,16 +28,19 @@
   .item{background:#0b1118;border:1px solid var(--line);padding:10px;border-radius:12px}
   .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#132235;border:1px solid var(--line)}
   .mini{font-size:12px;color:var(--muted)}
+  .drop{border:2px dashed #2a394a;border-radius:12px;padding:8px}
+  canvas{max-width:100%;border:1px solid var(--line);border-radius:12px}
   .loader{display:none;align-items:center;gap:8px}
   .spin{width:16px;height:16px;border-radius:50%;border:2px solid #29425a;border-top-color:var(--brand);animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
-    <h1>OCR – Órdenes de Venta (Smart v3)</h1>
-    <div class="sub">Corta automáticamente columnas <b>N°</b>, <b>Descripción</b> y <b>Cant.</b> con <b>OpenCV.js</b> y aplica OCR por columna (Tesseract.js, spa).</div>
+    <h1>Smart OCR v4.1 – Calidad Sede Villa</h1>
+    <div class="sub">Corta <b>N°</b>, <b>Descripción</b> y <b>Cant.</b> con OpenCV.js y hace OCR por columna (Tesseract.js, español). <b>Detección automática</b> al subir/tomar foto. Drag & drop en PC.</div>
   </div>
 </header>
 
@@ -48,7 +50,6 @@
       <div>
         <label class="ghost" for="file">📷 Tomar foto / Subir imagen</label>
         <input id="file" type="file" accept="image/*" capture="environment"/>
-        <button id="btnDetect" class="ghost" disabled>🧭 Detectar tabla y cortar columnas</button>
         <button id="btnOCR" class="ghost" disabled>🔎 OCR por columnas</button>
         <button id="btnClear" class="ghost">🗑️ Limpiar</button>
       </div>
@@ -56,29 +57,19 @@
     </div>
 
     <div class="grid" style="margin-top:12px">
-      <div>
-        <div class="chip">Vista previa (auto-mejora y corrección leve)</div>
-        <canvas id="canvas"></canvas>
-        <div class="mini">Tip: encuadra principalmente la <b>tabla</b>, con buena luz y lo más perpendicular posible.</div>
+      <div class="drop" id="drop">
+        <div class="chip">Vista previa (con autocorrección leve)</div>
+        <canvas id="canvas" aria-label="Vista previa"></canvas>
+        <div class="mini">Tip: encuadra la <b>tabla</b>. Arrastra una imagen aquí (PC) o usa la cámara (móvil).</div>
       </div>
       <div>
-        <div class="chip">Recortes de columnas detectadas</div>
+        <div class="chip">Recortes de columnas</div>
         <div class="cols" style="margin-top:8px">
-          <div>
-            <div class="mini">Col 1 • N°</div>
-            <canvas id="cCol1"></canvas>
-          </div>
-          <div>
-            <div class="mini">Col 3 • Descripción</div>
-            <canvas id="cCol3"></canvas>
-          </div>
-          <div>
-            <div class="mini">Col 5 • Cant.</div>
-            <canvas id="cCol5"></canvas>
-          </div>
+          <div><div class="mini">Col 1 • N°</div><canvas id="cCol1"></canvas></div>
+          <div><div class="mini">Col 3 • Descripción</div><canvas id="cCol3"></canvas></div>
+          <div><div class="mini">Col 5 • Cant.</div><canvas id="cCol5"></canvas></div>
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button id="btnConfirm" class="ok" disabled>✅ Confirmar columnas</button>
           <span id="colInfo" class="badge">Columnas: –</span>
         </div>
       </div>
@@ -86,348 +77,275 @@
   </section>
 
   <section class="card">
-    <div class="chip">Resultados extraídos</div>
+    <div class="chip">Resultados</div>
     <div id="results" class="list" style="margin-top:8px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
       <button id="btnExportJSON" class="ok" disabled>⬇️ Exportar JSON</button>
       <button id="btnExportCSV" class="ok" disabled>⬇️ Exportar CSV</button>
       <span id="count" class="badge">0 ítems</span>
     </div>
+    <div class="mini" id="orderInfo">N° de Orden: –</div>
   </section>
 
   <p class="mini">Privacidad: todo se procesa <b>en tu navegador</b> (OpenCV.js + Tesseract.js). No se sube ninguna imagen.</p>
 </main>
 
 <!-- OpenCV.js y Tesseract.js -->
-<script async src="https://docs.opencv.org/4.x/opencv.js" onload="cvOnReady()" ></script>
+<script async src="https://docs.opencv.org/4.x/opencv.js" onload="cvOnReady()"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <script>
-const $ = (q)=>document.querySelector(q);
-const file = $('#file');
-const canvas = $('#canvas');
-const ctx = canvas.getContext('2d');
+/* ====== refs ====== */
+const $ = q => document.querySelector(q);
+const file = $('#file'), drop = $('#drop');
+const canvas = $('#canvas'), ctx = canvas.getContext('2d');
 const c1 = $('#cCol1'), c3 = $('#cCol3'), c5 = $('#cCol5');
-const r1 = c1.getContext('2d'), r3 = c3.getContext('2d'), r5 = c5.getContext('2d');
-const btnDetect = $('#btnDetect');
-const btnOCR = $('#btnOCR');
-const btnConfirm = $('#btnConfirm');
-const btnClear = $('#btnClear');
-const resultsEl = $('#results');
-const loader = $('#loader');
-const colInfo = $('#colInfo');
-const btnExportJSON = $('#btnExportJSON');
-const btnExportCSV = $('#btnExportCSV');
-const countBadge = $('#count');
+const resultsEl = $('#results'), countBadge = $('#count'), orderInfo = $('#orderInfo');
+const btnOCR = $('#btnOCR'), btnClear = $('#btnClear');
+const btnExportJSON = $('#btnExportJSON'), btnExportCSV = $('#btnExportCSV');
+const loader = $('#loader'), colInfo = $('#colInfo');
 
-let cvReady = false;
-let srcImage = null;              // HTMLImageElement
-let tableROI = null;              // {x,y,w,h}
-let colBounds = null;             // {x1,x3,x5,xEnd} absolutos (dentro del ROI)
-let extracted = [];
+let cvReady=false, srcImage=null, tableROI=null, colBounds=null, extracted=[], orderNo='';
 
-function cvOnReady(){ cv['onRuntimeInitialized']=()=>{ cvReady = true; }; }
+function cvOnReady(){ cv['onRuntimeInitialized']=()=>{ cvReady=true; }}
 
+/* ====== drag & drop ====== */
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault(); drop.style.borderColor='#4cc9f0'}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault(); drop.style.borderColor='#2a394a'}));
+drop.addEventListener('drop', async e=>{
+  const f = [...e.dataTransfer.files].find(x=>/^image\//.test(x.type));
+  if (f) await loadAndProcess(f); // AUTO
+});
+
+/* ====== file input ====== */
 file.addEventListener('change', async ()=>{
   if(!file.files?.length) return;
-  const img = await loadImage(file.files[0]);
-  drawBase(img);
-  srcImage = img;
-  btnDetect.disabled = !cvReady;
-  btnOCR.disabled = true;
-  btnConfirm.disabled = true;
-  clearCols();
-  setInfo('Columnas: –');
+  await loadAndProcess(file.files[0]); // AUTO
 });
 
 btnClear.addEventListener('click', ()=>{
-  file.value='';
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  clearCols();
-  resultsEl.innerHTML='';
-  setCount(0);
-  extracted = [];
-  btnDetect.disabled = true;
-  btnOCR.disabled = true;
-  btnConfirm.disabled = true;
-  setInfo('Columnas: –');
+  file.value=''; ctx.clearRect(0,0,canvas.width,canvas.height);
+  [c1,c3,c5].forEach(c=>{c.width=0;c.height=0});
+  resultsEl.innerHTML=''; setCount(0); extracted=[]; btnOCR.disabled=true;
+  colInfo.textContent='Columnas: –'; orderNo=''; orderInfo.textContent='N° de Orden: –';
 });
 
-btnDetect.addEventListener('click', async ()=>{
-  if(!srcImage || !cvReady) return;
+/* ====== flujo AUTO: cargar → detectar/cortar ====== */
+async function loadAndProcess(f){
   toggleLoading(true);
   try{
+    const img = await readImage(f);
+    drawBase(img);
+    srcImage = img;
+
+    // esperar OpenCV si aún no cargó
+    await waitFor(()=>cvReady, 8000);
+
     const res = detectTableAndColumns(canvas);
-    tableROI = res.roi;
-    colBounds = res.cols; // {x1,x3,x5,xEnd}
-    // pintar recortes
+    tableROI = res.roi; colBounds = res.cols;
+
     cropToCanvas(canvas, c1, tableROI, colBounds.x1, colBounds.x3); // N°
     cropToCanvas(canvas, c3, tableROI, colBounds.x3, colBounds.x5); // Descripción
     cropToCanvas(canvas, c5, tableROI, colBounds.x5, colBounds.xEnd); // Cant
-    setInfo(`Columnas detectadas ✓  (N°:${colBounds.x1}-${colBounds.x3}, Desc:${colBounds.x3}-${colBounds.x5}, Cant:${colBounds.x5}-${colBounds.xEnd})`);
-    btnConfirm.disabled = false;
+    colInfo.textContent = `Columnas ✓  N°:${colBounds.x1}-${colBounds.x3}  Desc:${colBounds.x3}-${colBounds.x5}  Cant:${colBounds.x5}-${colBounds.xEnd}`;
+    btnOCR.disabled = false;
   }catch(err){
-    alert('No se pudo detectar la tabla/columnas. Intenta encuadrar mejor la tabla. ' + err.message);
+    alert('No se pudo preparar la tabla. Intenta encuadrar mejor la tabla.');
     console.error(err);
-  }finally{
-    toggleLoading(false);
-  }
-});
+  }finally{ toggleLoading(false); }
+}
 
-btnConfirm.addEventListener('click', ()=>{
-  if (!c1.width || !c3.width || !c5.width) {
-    alert('Faltan recortes. Ejecuta "Detectar tabla y cortar columnas" primero.');
-    return;
-  }
-  btnOCR.disabled = false;
-});
-
+/* ====== OCR botón ====== */
 btnOCR.addEventListener('click', async ()=>{
-  if (btnOCR.disabled) return;
+  if(btnOCR.disabled) return;
   toggleLoading(true);
   try{
-    const [numsTxt, descTxt, qtyTxt] = await Promise.all([
-      ocrCanvas(c1), ocrCanvas(c3), ocrCanvas(c5)
+    const [numsTxt, descTxt, qtyTxt, orderTxt] = await Promise.all([
+      ocrCanvas(c1), ocrCanvas(c3), ocrCanvas(c5), ocrHeader(canvas)
     ]);
+    orderNo = extractOrderNo(orderTxt) || '';
+    if(orderNo) orderInfo.textContent = `N° de Orden: ${orderNo}`;
     const items = reconstructRows(numsTxt, descTxt, qtyTxt);
-    renderItems(items);
-    extracted = items;
-    btnExportJSON.disabled = !items.length;
-    btnExportCSV.disabled = !items.length;
-    setCount(items.length);
-  }catch(err){
-    alert('Error en OCR: '+err.message);
-    console.error(err);
-  }finally{
-    toggleLoading(false);
-  }
+    renderItems(items); extracted = items;
+    btnExportJSON.disabled = !items.length; btnExportCSV.disabled = !items.length; setCount(items.length);
+  }catch(err){ alert('Error en OCR: '+err.message); console.error(err);
+  }finally{ toggleLoading(false); }
 });
 
+/* ====== export ====== */
 btnExportJSON.addEventListener('click', ()=>{
-  downloadFile('items.json', JSON.stringify(extracted, null, 2), 'application/json');
+  const name = (orderNo? orderNo : 'items') + '.json';
+  downloadFile(name, JSON.stringify(extracted,null,2), 'application/json');
 });
 btnExportCSV.addEventListener('click', ()=>{
   const rows = [['numero','descripcion','cantidad'], ...extracted.map(r=>[r.numero, csvEsc(r.descripcion), r.cantidad])];
   const csv = rows.map(r=>r.join(',')).join('\n');
-  downloadFile('items.csv', csv, 'text/csv');
+  const name = (orderNo? orderNo : 'items') + '.csv';
+  downloadFile(name, csv, 'text/csv');
 });
 
-/* ================= UTILIDADES ================= */
-
-function setInfo(s){ colInfo.textContent = s; }
+/* ====== util ====== */
+function readImage(file){ return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=URL.createObjectURL(file);}); }
 function setCount(n){ countBadge.textContent = `${n} ítems`; }
 function toggleLoading(on){ loader.style.display = on ? 'flex' : 'none'; }
-function clearCols(){ [c1,c3,c5].forEach(c=>{c.width=0;c.height=0}); }
-
-function loadImage(file){
-  return new Promise((resolve,reject)=>{
-    const img = new Image();
-    img.onload = ()=>resolve(img);
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-function drawBase(img){
-  const maxW = 1500;
-  const scale = Math.min(1, maxW / img.naturalWidth);
-  const W = Math.round(img.naturalWidth*scale);
-  const H = Math.round(img.naturalHeight*scale);
-  canvas.width = W; canvas.height = H;
-  ctx.drawImage(img,0,0,W,H);
-  // rotación si muy apaisado
-  if (W > H * 1.4) {
-    const tmp = document.createElement('canvas');
-    tmp.width = H; tmp.height = W;
-    const tctx = tmp.getContext('2d');
-    tctx.translate(H,0); tctx.rotate(Math.PI/2);
-    tctx.drawImage(canvas,0,0);
-    canvas.width = tmp.width; canvas.height = tmp.height;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(tmp,0,0);
-  }
-}
-function downloadFile(name, content, mime){
-  const blob = new Blob([content], {type:mime});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-}
 function csvEsc(s){ return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function waitFor(fn, ms){ return new Promise((res,rej)=>{const t0=performance.now();(function loop(){ if(fn()) return res(); if(performance.now()-t0>ms) return rej(new Error('timeout')); requestAnimationFrame(loop) })();}); }
 
-/* ============== VISIÓN (OpenCV.js) ============== */
-// Devuelve: { roi:{x,y,w,h}, cols:{x1,x3,x5,xEnd} } en coord. absolutas de canvas
+/* ====== dibujo base + orientación ====== */
+function drawBase(img){
+  const maxW = 1700;
+  const ln = Math.max(img.naturalWidth, img.naturalHeight);
+  const scale = Math.min(1, maxW/ln);
+  let W = Math.round(img.naturalWidth*scale), H = Math.round(img.naturalHeight*scale);
+
+  // Heurística de orientación
+  const rotate = (W < H * 0.8);
+  if(!rotate){ canvas.width=W; canvas.height=H; ctx.drawImage(img,0,0,W,H); }
+  else{ canvas.width=H; canvas.height=W; ctx.save(); ctx.translate(canvas.width,0); ctx.rotate(Math.PI/2); ctx.drawImage(img,0,0,W,H); ctx.restore(); }
+
+  // Mejora leve de contraste
+  const id = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const d = id.data; for(let i=0;i<d.length;i+=4){ const y=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]; const v=Math.max(0,Math.min(255, ((y/255-0.5)*1.2+0.5)*255 )); d[i]=d[i+1]=d[i+2]=v; }
+  ctx.putImageData(id,0,0);
+}
+
+/* ====== OpenCV: detectar tabla + columnas ====== */
 function detectTableAndColumns(cnv){
   const src = cv.imread(cnv);
   const gray = new cv.Mat(); cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
   const blr = new cv.Mat(); cv.GaussianBlur(gray, blr, new cv.Size(3,3), 0);
   const bin = new cv.Mat(); cv.adaptiveThreshold(blr, bin, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 23, 7);
 
-  // Estructuras para detectar líneas
   const horiz = new cv.Mat.zeros(bin.rows, bin.cols, cv.CV_8UC1);
   const vert  = new cv.Mat.zeros(bin.rows, bin.cols, cv.CV_8UC1);
-  let size = Math.floor(bin.cols/60);
-  size = Math.max(10, Math.min(40, size));
-  const hStruct = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size,1));
-  const vStruct = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1,size));
+  let size = Math.floor(bin.cols/60); size = Math.max(10, Math.min(40, size));
+  const hK = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(size,1));
+  const vK = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1,size));
+  cv.erode(bin, horiz, hK); cv.dilate(horiz, horiz, hK);
+  cv.erode(bin, vert,  vK); cv.dilate(vert,  vK);
 
-  cv.erode(bin, horiz, hStruct); cv.dilate(horiz, horiz, hStruct);
-  cv.erode(bin, vert,  vStruct); cv.dilate(vert,  vert,  vStruct);
-
-  // Tabla aproximada = combinación de líneas
-  const tableMask = new cv.Mat();
-  cv.addWeighted(horiz, 0.5, vert, 0.5, 0, tableMask);
+  const tableMask = new cv.Mat(); cv.addWeighted(horiz,0.5,vert,0.5,0,tableMask);
   const contours = new cv.MatVector(); const hierarchy = new cv.Mat();
   cv.findContours(tableMask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-  if (contours.size() === 0) throw new Error('No se encontró la tabla.');
-
-  // Tomar el contorno más grande (área)
-  let maxArea = 0, bestRect = null;
-  for (let i=0;i<contours.size();i++){
-    const rect = cv.boundingRect(contours.get(i));
-    const area = rect.width*rect.height;
-    if (area > maxArea){ maxArea=area; bestRect=rect; }
-  }
-  // ROI de tabla con pequeño margen
-  const roi = {
-    x: Math.max(0, bestRect.x-4),
-    y: Math.max(0, bestRect.y-4),
-    w: Math.min(src.cols - bestRect.x + 8, bestRect.width+8),
-    h: Math.min(src.rows - bestRect.y + 8, bestRect.height+8)
-  };
-
-  // Dentro del ROI, detectar líneas verticales para columnas
-  const roiMat = bin.roi(new cv.Rect(roi.x, roi.y, roi.w, roi.h));
-  const v2 = new cv.Mat();
-  cv.erode(roiMat, v2, vStruct); cv.dilate(v2, v2, vStruct);
-
-  // Proyección vertical para picos de columnas
-  const proj = new Array(roi.w).fill(0);
-  for (let x=0;x<roi.w;x++){
-    for (let y=0;y<roi.h;y++){
-      proj[x] += v2.ucharPtr(y,x)[0] > 0 ? 1 : 0;
+  // ---- ROI robusto (evita undefined) ----
+  let roi;
+  if (contours.size()===0){
+    const x = Math.round(cnv.width*0.02), w = Math.round(cnv.width*0.96);
+    const y = Math.round(cnv.height*0.20), h = Math.round(cnv.height*0.62);
+    roi = {x,y,w,h};
+  } else {
+    let best=null, areaMax=0;
+    for (let i=0;i<contours.size();i++){
+      const r=cv.boundingRect(contours.get(i));
+      const a=r.width*r.height; if(a>areaMax){areaMax=a;best=r;}
     }
+    roi = {x:Math.max(0,best.x-4), y:Math.max(0,best.y-4),
+           w:Math.min(src.cols-best.x+8,best.width+8),
+           h:Math.min(src.rows-best.y+8,best.height+8)};
   }
-  // Umbral adaptable: tomar picos por encima del 60% del máximo
-  const maxP = Math.max(...proj);
-  const thr = maxP*0.6;
-  let peaks = [];
-  for (let x=1;x<roi.w-1;x++){
-    if (proj[x]>thr && proj[x]>=proj[x-1] && proj[x]>=proj[x+1]) peaks.push(x);
-  }
-  // Limpiar picos muy cercanos (fusionar)
-  const merged = [];
-  let acc=[peaks[0]];
-  for (let i=1;i<peaks.length;i++){
-    if (peaks[i]-acc[acc.length-1] < 15){ acc.push(peaks[i]); }
-    else { merged.push(Math.round(acc.reduce((a,b)=>a+b,0)/acc.length)); acc=[peaks[i]]; }
-  }
-  if (acc.length) merged.push(Math.round(acc.reduce((a,b)=>a+b,0)/acc.length));
+  if(!roi){ roi={x:Math.round(cnv.width*0.05), y:Math.round(cnv.height*0.20), w:Math.round(cnv.width*0.90), h:Math.round(cnv.height*0.60)}; }
 
-  // Necesitamos al menos 6 líneas (bordes + 5 separadores) para columnas 1..6
-  if (merged.length < 6) {
-    // fallback por proporciones si pocas líneas
-    const x1 = Math.round(roi.x + roi.w*0.03);
-    const x3 = Math.round(roi.x + roi.w*0.27);
-    const x5 = Math.round(roi.x + roi.w*0.81);
-    const xEnd = roi.x + roi.w - 6;
-    cleanup(src,gray,blr,bin,horiz,vert,tableMask,contours,hierarchy,roiMat,v2);
-    return {roi, cols:{x1,x3,x5,xEnd}};
-  }
+  // Líneas verticales dentro del ROI
+  const roiMat = bin.roi(new cv.Rect(roi.x, roi.y, roi.w, roi.h));
+  const v2 = new cv.Mat(); cv.erode(roiMat, v2, vK); cv.dilate(v2, v2, vK);
 
-  // Ordenar picos y definir columnas:
+  const proj = new Array(roi.w).fill(0);
+  for (let x=0;x<roi.w;x++){ for (let y=0;y<roi.h;y++){ proj[x]+= (v2.ucharPtr(y,x)[0]>0)?1:0; } }
+  const maxP = Math.max(...proj)||1; const thr = maxP*0.6;
+  let peaks=[]; for(let x=1;x<roi.w-1;x++){ if(proj[x]>thr && proj[x]>=proj[x-1] && proj[x]>=proj[x+1]) peaks.push(x); }
+  // fusionar picos cercanos
+  const merged=[]; if(peaks.length){ let acc=[peaks[0]]; for(let i=1;i<peaks.length;i++){ if(peaks[i]-acc[acc.length-1] < 15) acc.push(peaks[i]); else { merged.push(Math.round(acc.reduce((a,b)=>a+b,0)/acc.length)); acc=[peaks[i]]; } } if(acc.length) merged.push(Math.round(acc.reduce((a,b)=>a+b,0)/acc.length)); }
   merged.sort((a,b)=>a-b);
-  // Usamos bordes y pickeamos las columnas 1,3,5 aproximando:
-  // Bordes izquierdo y derecho del ROI:
-  const xLeft  = roi.x + merged[0];
-  const xC1End = roi.x + merged[1];   // fin col1
-  const xC3Ini = roi.x + merged[2];   // ini col3 (salta código)
-  const xC3End = roi.x + merged[4];   // fin col3 (antes de UM)
-  const xC5Ini = roi.x + merged[5];   // ini col5 (cantidad)
-  const xRight = roi.x + roi.w - 4;   // borde derecho
 
-  cleanup(src,gray,blr,bin,horiz,vert,tableMask,contours,hierarchy,roiMat,v2);
-  return {roi, cols:{x1:xLeft, x3:xC3Ini, x5:xC5Ini, xEnd:xRight}};
+  let cols;
+  if(merged.length>=6){
+    const xLeft = roi.x + merged[0];
+    const xC3Ini = roi.x + merged[2];   // saltamos Código
+    const xC5Ini = roi.x + merged[5];   // Cantidad
+    const xRight = roi.x + roi.w - 4;
+    cols = {x1:xLeft, x3:xC3Ini, x5:xC5Ini, xEnd:xRight};
+  } else {
+    // Proporciones calibradas a tu formato
+    const x1 = roi.x + Math.round(roi.w*0.03);
+    const x3 = roi.x + Math.round(roi.w*0.27);
+    const x5 = roi.x + Math.round(roi.w*0.80);
+    const xEnd = roi.x + roi.w - 6;
+    cols = {x1,x3,x5,xEnd};
+  }
+
+  [src,gray,blr,bin,horiz,vert,tableMask,contours,hierarchy,roiMat,v2].forEach(m=>{try{m.delete()}catch{}});
+  return {roi, cols};
 }
-function cleanup(...mats){ mats.forEach(m=>{try{m.delete()}catch{}}); }
 
 function cropToCanvas(srcCanvas, dstCanvas, roi, xStartAbs, xEndAbs){
-  const sx = xStartAbs, sw = Math.max(8, xEndAbs - xStartAbs);
+  const sx = xStartAbs, sw = Math.max(8, xEndAbs-xStartAbs);
   const sy = roi.y, sh = roi.h;
   dstCanvas.width = sw; dstCanvas.height = sh;
   const dctx = dstCanvas.getContext('2d');
   dctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
 }
 
+/* ====== OCR ====== */
 async function ocrCanvas(cnv){
   const blob = await new Promise(res=>cnv.toBlob(res,'image/png'));
+  const {data} = await Tesseract.recognize(blob, 'spa', {logger:m=>{}});
+  return data.text || '';
+}
+async function ocrHeader(fullCanvas){
+  const H = Math.round(fullCanvas.height*0.20);
+  const tmp = document.createElement('canvas'); tmp.width = fullCanvas.width; tmp.height = H;
+  tmp.getContext('2d').drawImage(fullCanvas, 0, 0, fullCanvas.width, H, 0, 0, fullCanvas.width, H);
+  const blob = await new Promise(res=>tmp.toBlob(res,'image/png'));
   const {data} = await Tesseract.recognize(blob,'spa',{logger:m=>{}});
   return data.text || '';
 }
-
-/* ============== RECONSTRUCCIÓN DE FILAS ============== */
-function reconstructRows(txtNums, txtDesc, txtQty){
-  // normalizar
-  const nums = splitClean(txtNums).map(s=>parseInt(s.match(/\d+/)?.[0]||'')).filter(n=>Number.isInteger(n));
-  const desc = splitClean(txtDesc).map(cleanDesc).filter(s=>s && /ARROZ/i.test(s));
-  const qtys = splitClean(txtQty).map(s=>parseInt((s.match(/\d{1,3}/)||[''])[0])).filter(n=>Number.isInteger(n) && n<=300);
-
-  // igualar longitudes por el mínimo
-  const L = Math.min(nums.length, desc.length, qtys.length);
-  const out = [];
-  for (let i=0;i<L;i++){
-    out.push({
-      numero: nums[i] ?? (i+1),
-      descripcion: desc[i],
-      cantidad: qtys[i]
-    });
-  }
-  // ordenar por numero asc
-  out.sort((a,b)=>(a.numero||0)-(b.numero||0));
-  return out;
+function extractOrderNo(t){
+  const m = (t||'').toUpperCase().match(/I?ILMVR\d{8,}/);
+  return m ? m[0] : '';
 }
-function splitClean(t){
-  return t
-    .replace(/\r/g,'\n')
-    .replace(/[|·•]/g,' ')
-    .split('\n')
-    .map(s=>s.trim())
-    .filter(Boolean);
-}
+
+/* ====== reconstrucción ====== */
+function splitClean(t){ return (t||'').replace(/\r/g,'\n').replace(/[|·•]/g,' ').split('\n').map(s=>s.trim()).filter(Boolean); }
 function cleanDesc(s){
   let d = s.toUpperCase();
-  // quitar códigos y ruidos
   d = d.replace(/P[R]?[D]?\d{4,6}/g,' ')
        .replace(/\b(SACO|SACOS|BLS|UND|UM)\b/g,' ')
-       .replace(/\b(EUA|PERU|USD)\b/g,' ')
        .replace(/[^\wÁÉÍÓÚÑÜ\s]/g,' ')
-       .replace(/\s{2,}/g,' ')
-       .trim();
-  // normalizaciones típicas
+       .replace(/\s{2,}/g,' ').trim();
   d = d.replace(/ARROZPILADO/g,'ARROZ PILADO')
        .replace(/PLADO|PLAGO/g,'PILADO')
        .replace(/ANEJO|A[E|I]JO/g,'ANEJO')
        .replace(/CHAL[A|Á]N|CHAIAN|CHA LAN/g,'CHALAN')
        .replace(/\sX(?=\d)/,' X ');
-  // mantener solo líneas con KG
-  if (!/KG/.test(d)) return '';
+  if(!/KG/.test(d)) return '';
   return d;
 }
+function reconstructRows(txtNums, txtDesc, txtQty){
+  const nums = splitClean(txtNums).map(s=>parseInt(s.match(/^\d{1,3}/)?.[0]||'')).filter(Number.isInteger);
+  const desc = splitClean(txtDesc).map(cleanDesc).filter(Boolean);
+  const qtys = splitClean(txtQty).map(s=>parseInt((s.match(/\d{1,3}$/)||[''])[0])).filter(n=>Number.isInteger(n)&&n<=300);
+  const L = Math.min(nums.length, desc.length, qtys.length);
+  const out=[]; for(let i=0;i<L;i++){ out.push({numero: nums[i] ?? (i+1), descripcion: desc[i], cantidad: qtys[i]}); }
+  out.sort((a,b)=>(a.numero||0)-(b.numero||0)); return out;
+}
 
-/* ============== RENDER ============== */
+/* ====== render ====== */
 function renderItems(items){
-  resultsEl.innerHTML = '';
-  if(!items.length){
-    resultsEl.innerHTML = '<div class="item">No se detectaron filas válidas.</div>';
-    return;
-  }
+  resultsEl.innerHTML='';
+  if(!items.length){ resultsEl.innerHTML='<div class="item">No se detectaron filas válidas.</div>'; return; }
   for(const r of items){
-    const el = document.createElement('div');
-    el.className='item';
-    el.innerHTML = `<b>N°:</b> ${r.numero}<br><b>Desc:</b> ${r.descripcion}<br><b>Cant:</b> ${r.cantidad}`;
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML=`<b>N°:</b> ${r.numero}<br><b>Desc:</b> ${r.descripcion}<br><b>Cant:</b> ${r.cantidad}`;
     resultsEl.appendChild(el);
   }
+}
+
+/* ====== helpers ====== */
+function downloadFile(name, content, mime){
+  const blob = new Blob([content], {type:mime});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 </script>
 </body>
